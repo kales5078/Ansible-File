@@ -1,0 +1,271 @@
+
+*inventey file/host file ---> we can define list of hosts in that file
+$ vi /etc/ansible/hosts
+
+*uncomment the inventey command on ansible.cfg
+$ vi /etc/ansible/ansible.cfg
+i)uncomment inventey and sudo (14 & 22)
+
+* to connect hosts from ansible server through SSH
+$ vi /etc/ssh/sshd_confg
+uncomment
+1.permit root login (32)
+2.password auth : yes (37)
+comment
+1. password auth : no (56)
+do same central host and manage host.
+
+$ service restart sshd --> do after changes 
+
+step1: access all host through SSH and ansible server
+step2: create user ansible in each hosts.
+
+to esatbish SSH connection (no password)
+$ ssh_keygen (type yes till key generation)
+
+copy ssh key on dedicated node
+$ ssh-copy-id user@pvt ip
+
+to check how many host connected to my ansble server.
+$ ansible all --list-hosts
+
+$ ansible groupname --list-hosts
+S
+$ ansible groupname[1] --list-hosts
+
+$ ansible groupname[1:5] --list-hosts
+
+
+*********Part-2***************
+######how to read error log file
+
+ways to push
+1.ad-hoc commands (simple linux commands) #temperory
+2.modules  (single commands)
+3.playbook (collection of module)
+* modules & playbook are wittrn in YAML script.
+
+Idopotancy : ovveride 
+
+1.ad-hoc:
+one liner command.
+not used for configration managemants.
+no reusble
+path : /etc/bin/ansible
+eg:
+$ ansible groupname -a "argumet" argumet---->linux command
+$ ansible all -a "argumet" argumet---->linux command
+eg:
+$ ansible all -a "ls"
+$ ansible all -a "apt install nginx"
+2.modules:
+modules are stored in inventey file
+
+$ ansible groupname -b -m modules name -a "pkg=httpd state=present"
+install = present
+uninstall = absent
+update = latest 
+module name = apt ,service like
+
+#install nginx through modules commands
+$ ansible demo -b -m apt -a  "pkg=nginx state=present"
+
+# start nginx through module commands
+$ ansible froentendgroup -b -m service -a "name=nginx state=started"
+
+#create user through modules commands
+$ ansible groupname -m user  "name=suraj state=present"
+
+#delete user through modules commands
+$ ansible groupname -m user  "name=suraj state=absent"
+
+#copy file from ansible server to host
+$ ansible groupname -m copy  "src=file1 dest=/home/ubuntu"
+
+#module setup
+$ ansible groupname -m setup 
+we can use filter
+$ ansible groupname -m setup -a "filter=*ipv4*"
+
+
+***************Playbook*******************************
+playbook : collection of modules command
+2.wittern in YAML format.
+3.ansible tower
+4.playbook ----> var , handler, roll, task
+5.playbook is divied into namy section.
+a.target section : no of host
+b.var section : defibe varible
+c.task section : list of all modules in order.
+
+
+YAML (basics)
+began with "---" & end with "..." & extension is yml
+start with list
+list is key-value pair called dictonary
+indentation is imp
+
+ task
+    name: suraj --->indentation
+ task
+    name: rushi --->indentation
+
+
+1.target section (target.yml)
+
+--- #(start with three hyphan)
+- host: groupname
+  user: ansible
+  become: yes
+  connection: SSH
+  gather_facts: yes
+... #(end with three dots)
+
+ **to run playbook command --> ansible-playbook target.yml
+
+task:
+   - name: install httpd in install on linux
+     action: apt name=httpd state=present
+
+**to run playbook command --> ansible-playbook target.yml
+
+#####demonstration of var in playbook
+
+--- #(start with three hyphan)
+- host: groupname
+  user: ansible
+  become: yes
+  connection: SSH
+  gather_facts: yes
+  var:
+    pkgname: httpd
+  tasks:
+    name: install  httpd server
+    
+... #(end with three dots)
+
+**to run playbook command --> ansible-playbook var.yml
+
+#handler section: depend on task,  if task is excuated then it will excuate but if task 
+is not excuated than handler also not excuated. basically it is depend on taks excuations.
+if tasks contain notify than handler will excuated.
+
+--- #(start with three hyphan)
+- host: groupname
+  user: ansible
+  become: yes
+  connection: SSH
+  gather_facts: yes
+  var:
+    pkgname: httpd
+  tasks:
+    name: install  httpd server
+    action: apt name='{{pkgname}}' state=present
+    notify: restart httpd
+  handlers:
+  - name: restart httpd
+    action: service name='{{pkgname}}' state=restarted
+... #(end with three dots)
+
+#####Dry-run --->to check whether playbook is wittrn correctly or not.
+
+command --> $ ansible-playbook playbookname.yml --check
+
+
+#####loops ----> like programming continue till exceptd result.
+--- #(start with three hyphan)
+- host: groupname
+  user: ansible
+  become: yes
+  connection: SSH
+  gather_facts: yes
+  tasks:
+    name: create a list of user
+    user: name=' {{item}} state=present
+    with_items:
+             - suraj
+             - rushi
+             - laxman
+             - dinesh
+             - mosin
+             - vismaya
+
+******conditional in ansible********
+sometimes you want to skip particular command on particular node at that time we use 
+
+tasks:
+  - name: install apache2 on debian
+    command: apt-get -y install apache2
+    when: ansible _os_family=="Debian"
+    name: install apache2 for readhat
+    command: yum install httpd
+    when: ansible_os_family=="RedHat"
+
+**********vault in ansible************
+we can make playbook encriptd 
+
+#create a new encrypted playbook
+$ ansible-vault create playbookName.yml
+
+#edit encrypted playbook
+$ ansible-vault edit playbookName.yml
+
+
+#change playbook encrypted playbook
+$ ansible-vault rekey playbookName.yml
+
+#to encrypt existing file
+$ ansible-vault encrypt playbookName.yml
+
+#to decrypt existing file
+$ ansible-vault decrypt playbookName.yml
+
+**************role in playbook************
+we can use two ways to reusing task.
+1.roll
+2.includes
+
+1.roll:
+   *roll are good for organising task and enscaplting data
+   needed to acomplish those task.
+
+   *we call organising in directory structure called rolls
+
+diffent type of roll
+--default
+--files
+--meta 
+--handler
+--var
+--taks
+
+//create parent dictonary
+$ ansible mkdir -p playbook/rolls/webserver/tasks
+$ ansible mkdir -p playbook/rolls/webserver/handlers
+$ ansible touch -p playbook/rolls/webserver/tasks/main.yml
+$ ansible touch master.yml
+
+tree ---> command
+ playbook
+  --master.yml
+  --rolls
+      --webserver
+           --handlers
+           --tasks
+               --main.yml
+
+ **conetent of main.yml**
+  - name: install apache2 server on ubuntu
+    command: apt install apache2
+
+**conetent of master.yml**
+ -hosts: target
+  user: ansible
+  become: yes
+  connection: ssh
+  rolls:
+         -webserver
+
+//rum master.YAML; command
+$ ansible-playbook master.yml
+
